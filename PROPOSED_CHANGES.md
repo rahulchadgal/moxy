@@ -23,8 +23,8 @@ The main additions are:
 
 What changed:
 
-- Added [cmd/moxy/main.go](/Users/rahulchadgal/go/moxy/cmd/moxy/main.go)
-- Added [cmd/moxy/main_test.go](/Users/rahulchadgal/go/moxy/cmd/moxy/main_test.go)
+- Added `cmd/moxy/main.go`
+- Added `cmd/moxy/main_test.go`
 - Added CLI flags:
   - `--host`
   - `--port`
@@ -52,7 +52,7 @@ Reviewer notes:
 
 What changed:
 
-- Added [mappings.go](/Users/rahulchadgal/go/moxy/mappings.go)
+- Added `mappings.go`
 - Added mapping types:
   - `Mapping`
   - `MappingRequest`
@@ -267,8 +267,8 @@ Reviewer notes:
 
 What changed:
 
-- Expanded [mappings_test.go](/Users/rahulchadgal/go/moxy/mappings_test.go)
-- Added [cmd/moxy/main_test.go](/Users/rahulchadgal/go/moxy/cmd/moxy/main_test.go)
+- Expanded `mappings_test.go`
+- Added `cmd/moxy/main_test.go`
 
 Newly covered areas include:
 
