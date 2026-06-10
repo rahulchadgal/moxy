@@ -319,19 +319,6 @@ The main areas an author may want to review carefully are:
 - whether `ClearExpectations()` clearing loaded mappings is the right long-term behavior
 - whether the standalone admin API surface is the right minimum shape for a first release
 
-## README Follow-Up
-
-The README was intentionally left unchanged in this branch so the author can first review the code, API shape, and proposed direction without changing the public-facing landing page.
-
-If these changes are accepted, the README should be updated before or during release to include:
-
-- the standalone `moxy` binary
-- JSON mapping examples
-- `/__moxy` admin endpoints
-- request journal APIs
-- dynamic response templates
-- the new coverage and verification status if the project wants to show it
-
 ## Deferred Work
 
 These are intentionally not included in this branch:
