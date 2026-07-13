@@ -62,6 +62,13 @@ func (m *MockServer) LoadMappings(path string) error {
 	if err != nil {
 		return fmt.Errorf("load mappings from %q: %w", path, err)
 	}
+
+	type loadedMapping struct {
+		name    string
+		mapping Mapping
+		baseDir string
+	}
+	var loaded []loadedMapping
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -75,8 +82,24 @@ func (m *MockServer) LoadMappings(path string) error {
 		if err := json.Unmarshal(data, &mapping); err != nil {
 			return fmt.Errorf("parse mapping %q: %w", entry.Name(), err)
 		}
-		if err := m.addMapping(mapping, filepath.Dir(fullPath)); err != nil {
-			return fmt.Errorf("add mapping %q: %w", entry.Name(), err)
+		loaded = append(loaded, loadedMapping{
+			name:    entry.Name(),
+			mapping: mapping,
+			baseDir: filepath.Dir(fullPath),
+		})
+	}
+
+	sort.SliceStable(loaded, func(i, j int) bool {
+		left, right := normalizedPriority(loaded[i].mapping.Priority), normalizedPriority(loaded[j].mapping.Priority)
+		if left == right {
+			return loaded[i].name < loaded[j].name
+		}
+		return left < right
+	})
+
+	for _, item := range loaded {
+		if err := m.addMapping(item.mapping, item.baseDir); err != nil {
+			return fmt.Errorf("add mapping %q: %w", item.name, err)
 		}
 	}
 	return nil
@@ -188,9 +211,9 @@ func applyMappingResponse(exp *Expectation, response MappingResponse, baseDir st
 	resp.TimeoutSimulation = response.Timeout
 
 	if response.BodyFile != "" {
-		bodyFile := response.BodyFile
-		if baseDir != "" && !filepath.IsAbs(bodyFile) {
-			bodyFile = filepath.Join(baseDir, bodyFile)
+		bodyFile, err := resolveMappingBodyFile(response.BodyFile, baseDir)
+		if err != nil {
+			return err
 		}
 		data, err := os.ReadFile(bodyFile)
 		if err != nil {
@@ -208,15 +231,43 @@ func applyMappingResponse(exp *Expectation, response MappingResponse, baseDir st
 	return nil
 }
 
+func resolveMappingBodyFile(bodyFile, baseDir string) (string, error) {
+	if baseDir == "" {
+		return bodyFile, nil
+	}
+
+	base, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve mapping directory %q: %w", baseDir, err)
+	}
+	candidate := bodyFile
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(base, candidate)
+	}
+	candidate, err = filepath.Abs(filepath.Clean(candidate))
+	if err != nil {
+		return "", fmt.Errorf("resolve response.bodyFile %q: %w", bodyFile, err)
+	}
+	rel, err := filepath.Rel(base, candidate)
+	if err != nil {
+		return "", fmt.Errorf("resolve response.bodyFile %q: %w", bodyFile, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("response.bodyFile %q escapes mapping directory", bodyFile)
+	}
+	return candidate, nil
+}
+
 func (m *MockServer) sortExpectationsLocked() {
 	sort.SliceStable(m.expectations, func(i, j int) bool {
-		left, right := m.expectations[i].Priority, m.expectations[j].Priority
-		if left == 0 {
-			left = 5
-		}
-		if right == 0 {
-			right = 5
-		}
+		left, right := normalizedPriority(m.expectations[i].Priority), normalizedPriority(m.expectations[j].Priority)
 		return left < right
 	})
+}
+
+func normalizedPriority(priority int) int {
+	if priority == 0 {
+		return 5
+	}
+	return priority
 }

@@ -128,6 +128,103 @@ func TestLoadMappingsSequentialResponses(t *testing.T) {
 	}
 }
 
+func TestLoadMappingsSortsByPriority(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"z-high-priority.json": `{
+			"name": "high",
+			"priority": 1,
+			"request": {"method": "GET", "path": "/priority"},
+			"response": {"status": 200, "body": "high"}
+		}`,
+		"a-default-priority.json": `{
+			"name": "default",
+			"request": {"method": "GET", "path": "/priority"},
+			"response": {"status": 200, "body": "default"}
+		}`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ms := NewMockServer()
+	defer ms.Close()
+	if err := ms.LoadMappings(dir); err != nil {
+		t.Fatalf("LoadMappings failed: %v", err)
+	}
+
+	if len(ms.mappings) != 2 || ms.mappings[0].Name != "high" {
+		t.Fatalf("expected mappings to be registered by priority, got %+v", ms.mappings)
+	}
+
+	resp, err := http.Get(ms.URL() + "/priority")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if string(body) != "high" {
+		t.Fatalf("expected high-priority mapping response, got %s", string(body))
+	}
+}
+
+func TestLoadMappingsBodyFileMustStayInsideMappingDirectory(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "mappings")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parent, "secret.txt"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mapping := `{
+		"request": {"method": "GET", "path": "/secret"},
+		"response": {"status": 200, "bodyFile": "../secret.txt"}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "secret.json"), []byte(mapping), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ms := NewMockServer()
+	defer ms.Close()
+	err := ms.LoadMappings(dir)
+	if err == nil || !strings.Contains(err.Error(), "escapes mapping directory") {
+		t.Fatalf("expected bodyFile escape error, got %v", err)
+	}
+}
+
+func TestLoadMappingsBodyFileRelativeToMappingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "body.txt"), []byte("from-file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mapping := `{
+		"request": {"method": "GET", "path": "/file"},
+		"response": {"status": 200, "bodyFile": "body.txt"}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "file.json"), []byte(mapping), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ms := NewMockServer()
+	defer ms.Close()
+	if err := ms.LoadMappings(dir); err != nil {
+		t.Fatalf("LoadMappings failed: %v", err)
+	}
+
+	resp, err := http.Get(ms.URL() + "/file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if string(body) != "from-file" {
+		t.Fatalf("expected body file response, got %s", string(body))
+	}
+}
+
 func TestAdminAPI(t *testing.T) {
 	ms := NewMockServer()
 	defer ms.Close()
